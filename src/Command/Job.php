@@ -95,16 +95,7 @@ class Job extends Command
     public function DailyJob()
     {
         ini_set('memory_limit', '-1');
-        $nodes = Node::all();
-        foreach ($nodes as $node) {
-            $nodeSort = [1, 2, 5, 9, 999];     // 无需重置流量的节点类型
-            if (!in_array($node->sort, $nodeSort)) {
-                if (date('d') == $node->bandwidthlimit_resetday) {
-                    $node->node_bandwidth = 0;
-                    $node->save();
-                }
-            }
-        }
+        Node::whereNotIn('sort', [1, 2, 5, 9, 999])->where('bandwidthlimit_resetday',date('d'))->update(['node_bandwidth'=>0]); // 跳过重置流量的节点类型
 
         // 清理订阅记录
         UserSubscribeLog::where(
@@ -141,15 +132,12 @@ class Job extends Command
         }
 
         //auto reset
-        $shopRenew = Shop::where('status','1')->where('content','like','%reset_value%')->get(['id'])->toArray();
-        $shopRenewId = Bought::whereIn('shopid',array_filter(array_column($shopRenew, 'id')))->groupBy('userid')->orderBy("id","desc")->get(['id']);
-        $boughts = Bought::whereIn('id', array_filter(array_column(json_decode($shopRenewId), 'id')))->get();
-        $bought_users = array();
+        $shopRenew = Shop::where('status','1')->where('content','like','%reset_value%')->get()->pluck('id');
+        $shopRenewId = Bought::whereIn('shopid', $shopRenew)->groupBy('userid')->orderBy("id","desc")->get()->pluck('id');
+        $boughts = Bought::has('user')->whereIn('id', $shopRenewId)->get();
+        $bought_users = [];
         foreach ($boughts as $bought) {
             $user = $bought->user();
-            if ($user == null) {
-                continue;
-            }
 
             $shop = $bought->shop();
             if ($shop == null) {
